@@ -132,6 +132,7 @@ class MessageQueueHandler:
 
 def process_message(db_conn: DatabaseConnection, body: bytes, properties, agent: str) -> None:
     received_message = json.loads(body.decode())
+    print("received_message")
     mlms = None
     duration_start = time.time()
     
@@ -178,8 +179,11 @@ def process_message(db_conn: DatabaseConnection, body: bytes, properties, agent:
         result = {
             "responses": [{"features": []}],
             "error": {
-                "code": "inference_failed",
+                "code": "inference_faileeed",
                 "message": "Model inference failed.",
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "traceback": traceback.format_exc()
             },
             "duration": f"{time.time() - duration_start:.10f}s",
         }

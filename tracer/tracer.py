@@ -36,17 +36,21 @@ class Tracer:
                 "FULL_TRACE")           # includes all of the above)
     
     def __init__(self, name="mlms", trace_level="NO_TRACE", endpoint='http://localhost:4318/v1/traces', max_queue_size=4096, save_trace_result_path=None):
-        resource = Resource(attributes={SERVICE_NAME: name})
-        trace.set_tracer_provider(TracerProvider(resource=resource))
+        from opentelemetry.trace import ProxyTracerProvider
+        provider = trace.get_tracer_provider()
+        if isinstance(provider, ProxyTracerProvider):
+            resource = Resource(attributes={SERVICE_NAME: name})
+            provider = TracerProvider(resource=resource)
+            trace.set_tracer_provider(provider)
 
-        if "tracer_HOST" in os.environ and "tracer_PORT" in os.environ:
-            endpoint = f"{os.environ['tracer_HOST']}:{os.environ['tracer_PORT']}"
-        # https://opentelemetry-python.readthedocs.io/en/latest/exporter/otlp/otlp.html
-        if save_trace_result_path is None:
-            span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint), max_queue_size=max_queue_size)
-        else: 
-            span_processor = BatchSpanProcessor(CustomOTLPSpanExporter(filename=save_trace_result_path, endpoint=endpoint), max_queue_size=max_queue_size)
-        trace.get_tracer_provider().add_span_processor(span_processor)
+            if "tracer_HOST" in os.environ and "tracer_PORT" in os.environ:
+                endpoint = f"{os.environ['tracer_HOST']}:{os.environ['tracer_PORT']}"
+            # https://opentelemetry-python.readthedocs.io/en/latest/exporter/otlp/otlp.html
+            if save_trace_result_path is None:
+                span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint), max_queue_size=max_queue_size)
+            else: 
+                span_processor = BatchSpanProcessor(CustomOTLPSpanExporter(filename=save_trace_result_path, endpoint=endpoint), max_queue_size=max_queue_size)
+            provider.add_span_processor(span_processor)
 
         self.trace_level = trace_level 
         self.trace_level_int = self.trace_level_to_int(trace_level) 

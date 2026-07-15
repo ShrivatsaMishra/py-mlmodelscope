@@ -26,6 +26,7 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir transformers diffusers sentencepiece opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc grpcio opentelemetry-exporter-otlp-proto-http httpio aenum requests tqdm scipy chardet psycopg "psycopg[binary]" Pika opencv-python-headless librosa 
+    pip install --no-cache-dir pyannote.audio --no-dependencies
 
 # Clone py-mlmodelscope repository
 RUN git clone https://github.com/xlab-ub/py-mlmodelscope.git /py-mlmodelscope
