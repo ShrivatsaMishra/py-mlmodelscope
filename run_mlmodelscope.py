@@ -132,7 +132,6 @@ class MessageQueueHandler:
 
 def process_message(db_conn: DatabaseConnection, body: bytes, properties, agent: str) -> None:
     received_message = json.loads(body.decode())
-    print("received_message")
     mlms = None
     duration_start = time.time()
     
@@ -161,7 +160,7 @@ def process_message(db_conn: DatabaseConnection, body: bytes, properties, agent:
         )
         mlms.load_agent(task, agent, model_name, security_check, config, user)
         print(f"{agent}-agent loaded with {model_name} model")
-        mlms.load_dataset(dataset_name, batch_size, None, security_check)
+        mlms.load_dataset(dataset_name, batch_size, task, security_check)
         print(f"{dataset_name} dataset loaded")
         print("Prediction starts")
 
@@ -179,11 +178,8 @@ def process_message(db_conn: DatabaseConnection, body: bytes, properties, agent:
         result = {
             "responses": [{"features": []}],
             "error": {
-                "code": "inference_faileeed",
+                "code": "inference_failed",
                 "message": "Model inference failed.",
-                "error_type": type(error).__name__,
-                "error_message": str(error),
-                "traceback": traceback.format_exc()
             },
             "duration": f"{time.time() - duration_start:.10f}s",
         }

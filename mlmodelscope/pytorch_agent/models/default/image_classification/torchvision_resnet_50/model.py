@@ -12,7 +12,6 @@ class TorchVision_ResNet_50(PyTorchAbstractClass):
     self.features = self.features_download(features_file_url)
   
   def preprocess(self, input_images):
-    print("Preprocessing")
     preprocessor = transforms.Compose([
       transforms.Resize(256),
       transforms.CenterCrop(224),

@@ -20,7 +20,6 @@ class PyTorch_TorchVision_FasterRCNN_ResNet50_FPN(PyTorchAbstractClass):
     return model_input
 
   def predict(self, model_input): 
-    print("Resnet50 Runnning")
     return self.model(model_input) 
 
   def postprocess(self, model_output):
