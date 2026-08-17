@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import time
+import traceback
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Dict, Any
@@ -179,7 +180,11 @@ def process_message(db_conn: DatabaseConnection, body: bytes, properties, agent:
             "responses": [{"features": []}],
             "error": {
                 "code": "inference_failed",
+                "code": "inference_faileeed",
                 "message": "Model inference failed.",
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "traceback": traceback.format_exc()
             },
             "duration": f"{time.time() - duration_start:.10f}s",
         }
