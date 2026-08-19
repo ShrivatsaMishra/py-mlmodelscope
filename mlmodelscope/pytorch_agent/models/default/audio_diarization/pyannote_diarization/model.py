@@ -31,9 +31,9 @@ class PyTorch_Pyannote_Diarization(PyTorchAbstractClass):
     device = torch.device(self._device)
     self.model.to(device)
     self._is_dispatched = True
-    
-    # Initialize Mel Spectrogram transform
+
     self.mel_transform = T.MelSpectrogram(sample_rate=16000, n_mels=80)
+    self.power_to_db = T.AmplitudeToDB(stype="power", top_db=80)
 
   def eval(self):
     # pyannote.audio.Pipeline is not an nn.Module.
@@ -69,13 +69,18 @@ class PyTorch_Pyannote_Diarization(PyTorchAbstractClass):
     predictions = []
     with torch.no_grad():
       for audio_payload in model_input:
-        # Request detailed outputs containing confidence/scores from the pipeline
-        diarization = self.model(audio_payload, return_embeddings=False)
-        # Store waveform alongside diarization output for postprocessing
+        captured = {}
+
+        def capture_pipeline_artifact(step_name, artifact, **kwargs):
+          if step_name == "discrete_diarization":
+            captured["speaker_activity"] = artifact
+
+        diarization = self.model(audio_payload, hook=capture_pipeline_artifact)
         predictions.append({
             "diarization": diarization,
             "waveform": audio_payload["waveform"],
-            "sample_rate": audio_payload["sample_rate"]
+            "sample_rate": audio_payload["sample_rate"],
+            "speaker_activity": captured.get("speaker_activity")
         })
     return predictions
 
@@ -86,32 +91,58 @@ class PyTorch_Pyannote_Diarization(PyTorchAbstractClass):
         annotation = output["diarization"]
         waveform = output["waveform"]
         sample_rate = output["sample_rate"]
+        speaker_activity = output.get("speaker_activity")
+        speakers = annotation.labels()
 
         file_timeline = []
-        # Iterating over tracks with detailed attributes
         for segment, track, speaker in annotation.itertracks(yield_label=True):
-            # Extract confidence score if attached, otherwise default to 1.0 or calculated probability
-            confidence = getattr(annotation[segment, track], "confidence", 1.0)
-            
-            # Slice the audio segment corresponding to the diarization timestamps
+            confidence = self._segment_confidence(
+                speaker_activity, segment, speaker, speakers
+            )
+
             start_frame = int(segment.start * sample_rate)
             end_frame = int(segment.end * sample_rate)
             segment_waveform = waveform[:, start_frame:end_frame]
 
-            # Generate spectrogram for the segment (converted to Python list for easy serialization)
-            if segment_waveform.numel() > 0:
-                spectrogram_tensor = self.mel_transform(segment_waveform)
-                spectrogram = spectrogram_tensor.squeeze(0).tolist()
-            else:
-                spectrogram = []
-
-            file_timeline.append({
+            result = {
                 "start": round(segment.start, 3),
                 "end": round(segment.end, 3),
                 "speaker": speaker,
-                "confidence": round(float(confidence), 3),
-                "spectrogram": spectrogram
-            })
+                "confidence": confidence,
+                "confidence_type": "mean_speaker_activity" if confidence is not None else None,
+                "spectrogram": self._spectrogram(segment_waveform)
+            }
+            file_timeline.append(result)
         final_diarisations.append(file_timeline)
 
     return final_diarisations
+
+  def _spectrogram(self, waveform, max_frames=512):
+    if waveform.numel() == 0:
+      return []
+
+    spectrogram = self.power_to_db(self.mel_transform(waveform)).squeeze(0)
+    if spectrogram.shape[-1] > max_frames:
+      spectrogram = torch.nn.functional.adaptive_avg_pool1d(
+          spectrogram, max_frames
+      )
+    return spectrogram.cpu().tolist()
+
+  @staticmethod
+  def _segment_confidence(speaker_activity, segment, speaker, speakers):
+    if speaker_activity is None or speaker not in speakers:
+      return None
+
+    try:
+      activity = speaker_activity.crop(segment, mode="center")
+      activity = torch.as_tensor(activity, dtype=torch.float32)
+      if activity.numel() == 0 or activity.ndim < 2:
+        return None
+      speaker_index = speakers.index(speaker)
+      values = activity[..., speaker_index]
+      values = values[torch.isfinite(values)]
+      if values.numel() == 0:
+        return None
+      return round(float(values.mean().clamp(0.0, 1.0)), 3)
+    except (AttributeError, IndexError, RuntimeError, TypeError, ValueError):
+      return None
